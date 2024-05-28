@@ -197,7 +197,6 @@ export PYTEST_ARGS
 python-virtual-environment: $(OSS_HOME)/venv
 .PHONY: python-virtual-environment
 
-python-integration-test-environment: push-pytest-images
 python-integration-test-environment: $(tools/kubestatus)
 python-integration-test-environment: $(tools/kubectl)
 python-integration-test-environment: python-virtual-environment
@@ -246,7 +245,7 @@ pytest-kat-envoy3-tests: # doing this all at once is too much for CI...
 	$(MAKE) pytest-run-tests PYTEST_ARGS="$$PYTEST_ARGS python/tests/kat"
 pytest-kat-envoy3: python-integration-test-environment pytest-kat-envoy3-tests
 # ... so we have a separate rule to run things split up
-build-aux/.pytest-kat.txt.stamp: $(OSS_HOME)/venv push-pytest-images $(tools/kubectl) FORCE
+build-aux/.pytest-kat.txt.stamp: $(OSS_HOME)/venv $(tools/kubectl) FORCE
 	. venv/bin/activate && set -o pipefail && pytest --collect-only python/tests/kat 2>&1 | sed -En 's/.*<Function (.*)>/\1/p' | cut -d. -f1 | sort -u > $@
 build-aux/pytest-kat.txt: build-aux/%: build-aux/.%.stamp $(tools/copy-ifchanged)
 	$(tools/copy-ifchanged) $< $@
@@ -443,7 +442,15 @@ save-dev: FORCE inspect-image-cache images-build
 	done
 .PHONY: save-dev
 
-AMBASSADOR_DOCKER_IMAGE = $(shell sed -n 2p docker/$(LCNAME).docker.push.remote 2>/dev/null)
+_save-pytest-images = test-auth test-shadow test-stats
+save-pytest-images: FORCE inspect-image-cache build-pytest-images
+	@for image in $(_save-pytest-images); do \
+		printf '$(CYN)==> $(GRN)saving image %s as tarball: $(BLU)%s.tar$(GRN)...$(END)\n' $$image $$image; \
+		docker image save --output $$image.tar $$(cat docker/$$image.docker); \
+	done
+.PHONY: save-pytest-images
+
+AMBASSADOR_DOCKER_IMAGE = $(shell sed -n 2p docker/$(LCNAME).docker.tag.local 2>/dev/null)
 export AMBASSADOR_DOCKER_IMAGE
 
 _user-vars  = BUILDER_NAME
